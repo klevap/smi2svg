@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SMILES → SVG Converter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --gap: 14px;
+      --radius: 10px;
+      --border: #e5e7eb;
+      --bg: #f6f7fb;
+      --panel: #fff;
+      --muted: #6b7280;
+      --primary: #0b72ff;
+    }
+    html,body{height:100%}
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; margin: 0; background: var(--bg); color: #222; }
+    .wrap{ max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    h1{ margin: 0 0 16px; text-align: center; }
+    .layout{
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: var(--gap);
+      align-items: start;
+    }
+    .card{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    }
+    .pad{ padding: 16px; }
+    .row{ display: grid; gap: 10px; }
+    .row.cols-2{ grid-template-columns: repeat(2,1fr); }
+    .row.cols-3{ grid-template-columns: repeat(3,1fr); }
+    .field{ display:flex; flex-direction:column; gap:6px; }
+    label{ font-size: 13px; color: #444; }
+    input[type="text"],input[type="number"],select,textarea{
+      width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #ccc; border-radius:8px; font-size:14px; background:#fff;
+    }
+    textarea{ min-height:72px; font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    .btns{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    button{ padding:10px 14px; border:0; border-radius:8px; background:var(--primary); color:#fff; cursor:pointer; font-size:14px; }
+    button.secondary{ background:#6b7280; }
+    button.ghost{ background:#eef2ff; color:#1f2937; }
+    .output{
+      border-top:1px solid var(--border);
+      background:#fff;
+      border-radius: 0 0 var(--radius) var(--radius);
+      padding:10px;
+      min-height:300px;
+      display:flex; align-items:center; justify-content:center; overflow:auto;
+    }
+    .status{ color:#b00020; text-align:center; min-height:20px; margin-top:8px; font-weight:600; }
+    .side h3{ margin:0 0 10px; font-size:16px; }
+    .hidden{ display:none; }
+    .toolbar{
+      display:flex; gap:10px; align-items:end; flex-wrap:wrap;
+    }
+    .toolbar .field{flex:1}
+    .bar{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      margin-top: 10px;
+    }
+    .muted{ color: var(--muted); font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>SMILES → SVG Converter</h1>
+
+    <div class="layout">
+      <!-- Left half: input, general options, output, buttons -->
+      <div class="card">
+        <div class="pad">
+          <div class="row cols-2">
+            <div class="field">
+              <label for="smiles">SMILES</label>
+              <input id="smiles" type="text" value="CC(=O)Oc1ccccc1C(=O)O" placeholder="Example: CC(=O)Oc1ccccc1C(=O)O" />
+            </div>
+            <div class="field">
+              <label for="engine">Engine</label>
+              <select id="engine">
+                <option value="smilesdrawer">SmilesDrawer</option>
+                <option value="rdkit">RDKit.js</option>
+                <option value="openchemlib">OpenChemLib.js</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <div class="field">
+              <label for="preset">Theme Preset</label>
+              <select id="preset">
+                <option value="clean">Clean - basic</option>
+                <option value="thick">Thick bonds - thicker</option>
+                <option value="poster">Poster - large</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="imgWidth">SVG Width, px</label>
+              <input id="imgWidth" type="number" value="600" min="50" />
+            </div>
+            <div class="field">
+              <label for="imgHeight">SVG Height, px</label>
+              <input id="imgHeight" type="number" value="450" min="50" />
+            </div>
+            <div class="btns">
+              <button id="renderBtn">Render</button>
+              <button id="saveBtn" class="ghost">Save SVG</button>
+              <button id="resetBtn" class="secondary">Reset Options</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="viewer" class="output">
+          <div id="status">Loading libraries...</div>
+        </div>
+        <div id="error" class="status"></div>
+        <div class="pad muted">Hint: you can press Enter in the SMILES field</div>
+      </div>
+
+      <!-- Right half: options panel for the current engine -->
+      <div class="card side pad">
+        <h3 id="side-title">Engine Options</h3>
+
+        <!-- SmilesDrawer -->
+        <div id="panel-smilesdrawer" class="panel">
+          <div class="row cols-3">
+            <div class="field"><label>bondLength</label><input id="sd-bondLength" type="number" step="0.1" value="15"></div>
+            <div class="field"><label>bondThickness</label><input id="sd-bondThickness" type="number" step="0.1" value="0.8"></div>
+            <div class="field"><label>shortBondLength</label><input id="sd-shortBondLength" type="number" step="0.01" value="0.85"></div>
+            <div class="field"><label>bondSpacing</label><input id="sd-bondSpacing" type="number" step="0.01" value="2.7"></div>
+            <div class="field"><label>atomVisualization</label>
+              <select id="sd-atomVisualization">
+                <option value="default">default</option>
+                <option value="balls">balls</option>
+                <option value="none">none</option>
+              </select>
+            </div>
+            <div class="field"><label>fontSizeLarge</label><input id="sd-fontSizeLarge" type="number" step="0.1" value="6" /></div>
+            <div class="field"><label>fontSizeSmall</label><input id="sd-fontSizeSmall" type="number" step="0.1" value="3.5" /></div>
+            <div class="field"><label>padding</label><input id="sd-padding" type="number" step="0.1" value="20" /></div>
+            <div class="field"><label>overlapSensitivity</label><input id="sd-overlapSensitivity" type="number" step="0.01" value="0.42" /></div>
+            <div class="field"><label>overlapResolutionIterations</label><input id="sd-overlapResolutionIterations" type="number" step="1" value="1" /></div>
+            <div class="field"><label>compactDrawing</label>
+              <select id="sd-compactDrawing"><option value="true">true</option><option value="false">false</option></select>
+            </div>
+            <div class="field"><label>isomeric</label>
+              <select id="sd-isomeric"><option value="true">true</option><option value="false">false</option></select>
+            </div>
+            <div class="field"><label>terminalCarbons</label>
+              <select id="sd-terminalCarbons"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>explicitHydrogens</label>
+              <select id="sd-explicitHydrogens"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>experimental</label>
+              <select id="sd-experimental"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Extra JSON options - will be merged into SmilesDrawer settings</label>
+            <textarea id="sd-extra" placeholder='Example: {"themes":{"light":{"C":"#000"}}}'></textarea>
+          </div>
+        </div>
+
+        <!-- RDKit -->
+        <div id="panel-rdkit" class="panel hidden">
+          <div class="row cols-3">
+            <div class="field"><label>bondLineWidth</label><input id="rk-bondLineWidth" type="number" step="0.1" value="1.2" /></div>
+            <div class="field"><label>multipleBondOffset</label><input id="rk-multipleBondOffset" type="number" step="0.05" value="0.15" /></div>
+            <div class="field"><label>padding (fraction)</label><input id="rk-padding" type="number" step="0.01" value="0.10" /></div>
+            <div class="field"><label>centreMoleculesBeforeDrawing</label>
+              <select id="rk-centre"><option value="true">true</option><option value="false">false</option></select>
+            </div>
+            <div class="field"><label>addAtomIndices</label>
+              <select id="rk-addAtomIndices"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>addBondIndices</label>
+              <select id="rk-addBondIndices"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>explicitMethyl</label>
+              <select id="rk-explicitMethyl"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>includeRadicals</label>
+              <select id="rk-includeRadicals"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>legend</label><input id="rk-legend" type="text" placeholder="caption" /></div>
+            <div class="field"><label>legendFontSize</label><input id="rk-legendFontSize" type="number" step="1" value="16" /></div>
+            <div class="field"><label>minFontSize</label><input id="rk-minFontSize" type="number" step="1" value="10" /></div>
+            <div class="field"><label>maxFontSize</label><input id="rk-maxFontSize" type="number" step="1" value="40" /></div>
+            <div class="field"><label>fixedBondLength</label><input id="rk-fixedBondLength" type="number" step="0.1" value="0" /></div>
+            <div class="field"><label>fixedScale</label><input id="rk-fixedScale" type="number" step="0.1" value="0" /></div>
+            <div class="field"><label>backgroundColour</label><input id="rk-backgroundColour" type="color" value="#ffffff" /></div>
+            <div class="field"><label>symbolColour</label><input id="rk-symbolColour" type="color" value="#000000" /></div>
+            <div class="field"><label>scaleBondWidth</label>
+              <select id="rk-scaleBondWidth"><option value="true">true</option><option value="false">false</option></select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Extra JSON options - any MolDrawOptions</label>
+            <textarea id="rk-extra" placeholder='Example: {"highlightRadius": 0.6}'></textarea>
+          </div>
+        </div>
+
+        <!-- OpenChemLib -->
+        <div id="panel-ocl" class="panel hidden">
+          <div class="row cols-3">
+            <div class="field"><label>strokeWidth</label><input id="ocl-strokeWidth" type="number" step="0.1" value="1.6" /></div>
+            <div class="field"><label>factorTextSize</label><input id="ocl-factorTextSize" type="number" step="0.1" value="1" /></div>
+            <div class="field"><label>showAtomNumber</label>
+              <select id="ocl-showAtomNumber"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>showBondNumber</label>
+              <select id="ocl-showBondNumber"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>noImplicitHydrogen</label>
+              <select id="ocl-noImplicitHydrogen"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>drawBondsInGray</label>
+              <select id="ocl-drawBondsInGray"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>autoCrop</label>
+              <select id="ocl-autoCrop"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>autoCropMargin</label><input id="ocl-autoCropMargin" type="number" step="1" value="5" /></div>
+            <div class="field"><label>fontWeight</label><input id="ocl-fontWeight" type="text" placeholder="e.g., 700" /></div>
+          </div>
+          <div class="field">
+            <label>Extra JSON options - passed to Molecule.toSVG</label>
+            <textarea id="ocl-extra" placeholder='Example: {"suppressESR": true}'></textarea>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <!-- SmilesDrawer 2.0.3 - stable SVG rendering -->
+  <script src="https://unpkg.com/smiles-drawer@2.0.3/dist/smiles-drawer.min.js"></script>
+  <script src="https://unpkg.com/@rdkit/rdkit/Code/MinimalLib/dist/RDKit_minimal.js"></script>
+  <script src="https://unpkg.com/openchemlib@8.17.0/dist/openchemlib-full.js"></script>
+
+  <script>
+    (function(){
+      const smilesEl = document.getElementById('smiles');
+      const engineEl = document.getElementById('engine');
+      const presetEl = document.getElementById('preset');
+      const imgWidthEl = document.getElementById('imgWidth');
+      const imgHeightEl = document.getElementById('imgHeight');
+      const renderBtn = document.getElementById('renderBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const viewer = document.getElementById('viewer');
+      const statusEl = document.getElementById('status');
+      const errorEl = document.getElementById('error');
+      const panels = {
+        smilesdrawer: document.getElementById('panel-smilesdrawer'),
+        rdkit: document.getElementById('panel-rdkit'),
+        openchemlib: document.getElementById('panel-ocl')
+      };
+      const sideTitle = document.getElementById('side-title');
+
+      // RDKit init
+      let RDKitModuleInstance = null;
+      statusEl.textContent = 'Initializing RDKit.js...';
+      if (window.initRDKitModule) {
+        window.initRDKitModule().then((m) => {
+          RDKitModuleInstance = m;
+          statusEl.textContent = '';
+          draw();
+        }).catch((e) => {
+          console.error('RDKit init error', e);
+          statusEl.textContent = 'Failed to initialize RDKit.js';
+        });
+      } else {
+        statusEl.textContent = 'RDKit.js script not found';
+      }
+
+      function updatePanels(){
+        const eng = engineEl.value;
+        sideTitle.textContent = 'Engine Options - ' + (eng === 'smilesdrawer' ? 'SmilesDrawer' : eng === 'rdkit' ? 'RDKit.js' : 'OpenChemLib');
+        Object.entries(panels).forEach(([k, el]) => el.classList.toggle('hidden', k !== eng));
+      }
+      engineEl.addEventListener('change', ()=>{ updatePanels(); applyPreset(); draw(); });
+      updatePanels();
+
+      renderBtn.addEventListener('click', draw);
+      saveBtn.addEventListener('click', saveSVG);
+      resetBtn.addEventListener('click', resetOptions);
+      presetEl.addEventListener('change', ()=>{ applyPreset(); draw(); });
+      smilesEl.addEventListener('keyup', e => { if (e.key === 'Enter') draw(); });
+
+      function parseJSONSafe(text) {
+        if (!text || !text.trim()) return {};
+        try { return JSON.parse(text); } catch { return {}; }
+      }
+      function boolSelect(val) { return String(val) === 'true'; }
+      function hexToRgb01(hex) {
+        const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        if (!m) return [1,1,1];
+        return [parseInt(m[1],16)/255, parseInt(m[2],16)/255, parseInt(m[3],16)/255];
+      }
+      function clearOutput() {
+        viewer.innerHTML = '';
+        errorEl.textContent = '';
+      }
+      function getWH(){
+        const w = Math.max(50, Number(imgWidthEl.value) || 600);
+        const h = Math.max(50, Number(imgHeightEl.value) || 450);
+        return { w, h };
+      }
+      function setSvgSize(svgString, w, h) {
+        // insert width/height and viewBox into the root <svg ...> tag
+        let out = svgString.replace(/<svg([^>]*)>/i, (m, attrs) => {
+          let a = attrs.replace(/\s(width|height|viewBox)="[^"]*"/gi, '');
+          return `<svg${a} width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+        });
+        return out;
+      }
+
+      // Presets - affect general dimensions and engine parameters
+      function applyPreset(){
+        const p = presetEl.value;
+        if (p === 'clean'){
+          imgWidthEl.value = 600; imgHeightEl.value = 450;
+          // SD
+          setVal('sd-bondThickness', 0.8); setVal('sd-fontSizeLarge', 6); setVal('sd-fontSizeSmall', 3.5);
+          // RDKit
+          setVal('rk-bondLineWidth', 1.2); setVal('rk-padding', 0.10); setSel('rk-scaleBondWidth','true');
+          setVal('rk-fixedBondLength', 0); setVal('rk-fixedScale', 0); setSel('rk-centre','true');
+          // OCL
+          setVal('ocl-strokeWidth', 1.6); setVal('ocl-factorTextSize', 1); setSel('ocl-autoCrop','false'); setVal('ocl-autoCropMargin', 5);
+        }
+        if (p === 'thick'){
+          imgWidthEl.value = 700; imgHeightEl.value = 500;
+          setVal('sd-bondThickness', 1.2); setVal('sd-fontSizeLarge', 7); setVal('sd-fontSizeSmall', 4);
+          setVal('rk-bondLineWidth', 2.0); setVal('rk-padding', 0.12); setSel('rk-scaleBondWidth','true'); setSel('rk-centre','true');
+          setVal('rk-fixedBondLength', 0); setVal('rk-fixedScale', 0);
+          setVal('ocl-strokeWidth', 2.2); setVal('ocl-factorTextSize', 1.15); setSel('ocl-autoCrop','false'); setVal('ocl-autoCropMargin', 6);
+        }
+        if (p === 'poster'){
+          imgWidthEl.value = 1200; imgHeightEl.value = 900;
+          setVal('sd-bondThickness', 1.5); setVal('sd-fontSizeLarge', 9); setVal('sd-fontSizeSmall', 6);
+          setVal('rk-bondLineWidth', 2.6); setVal('rk-padding', 0.10); setSel('rk-scaleBondWidth','true'); setSel('rk-centre','true');
+          setVal('rk-fixedBondLength', 0); setVal('rk-fixedScale', 0);
+          setVal('ocl-strokeWidth', 3.0); setVal('ocl-factorTextSize', 1.3); setSel('ocl-autoCrop','false'); setVal('ocl-autoCropMargin', 8);
+        }
+      }
+      function setVal(id, v){ const el = document.getElementById(id); if(el) el.value = v; }
+      function setSel(id, v){ const el = document.getElementById(id); if(el) el.value = v; }
+
+      function draw(){
+        clearOutput();
+        const smiles = (smilesEl.value || '').trim();
+        if (!smiles){ errorEl.textContent = 'Please enter a SMILES string'; return; }
+        const { w, h } = getWH();
+        const eng = engineEl.value;
+
+        try{
+          if (eng === 'smilesdrawer') renderSmilesDrawer(smiles, w, h);
+          if (eng === 'rdkit') renderRDKit(smiles, w, h);
+          if (eng === 'openchemlib') renderOCL(smiles, w, h);
+        }catch(e){
+          console.error(e);
+          errorEl.textContent = 'Critical rendering error';
+        }
+      }
+
+      // --- SmilesDrawer ---
+      function sdOptions(w,h){
+        const opts = {
+          width: w,
+          height: h,
+          bondLength: Number(document.getElementById('sd-bondLength').value),
+          bondThickness: Number(document.getElementById('sd-bondThickness').value),
+          shortBondLength: Number(document.getElementById('sd-shortBondLength').value),
+          bondSpacing: Number(document.getElementById('sd-bondSpacing').value),
+          atomVisualization: document.getElementById('sd-atomVisualization').value,
+          fontSizeLarge: Number(document.getElementById('sd-fontSizeLarge').value),
+          fontSizeSmall: Number(document.getElementById('sd-fontSizeSmall').value),
+          padding: Number(document.getElementById('sd-padding').value),
+          overlapSensitivity: Number(document.getElementById('sd-overlapSensitivity').value),
+          overlapResolutionIterations: Number(document.getElementById('sd-overlapResolutionIterations').value),
+          compactDrawing: boolSelect(document.getElementById('sd-compactDrawing').value),
+          isomeric: boolSelect(document.getElementById('sd-isomeric').value),
+          terminalCarbons: boolSelect(document.getElementById('sd-terminalCarbons').value),
+          explicitHydrogens: boolSelect(document.getElementById('sd-explicitHydrogens').value),
+          experimental: boolSelect(document.getElementById('sd-experimental').value),
+        };
+        return Object.assign({}, opts, parseJSONSafe(document.getElementById('sd-extra').value));
+      }
+      function renderSmilesDrawer(smiles, w, h){
+        if (typeof SmilesDrawer === 'undefined' || !SmilesDrawer.SvgDrawer){
+          errorEl.textContent = 'SmilesDrawer is not loaded'; return;
+        }
+        const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgEl.setAttribute('width', String(w));
+        svgEl.setAttribute('height', String(h));
+        svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        viewer.appendChild(svgEl);
+
+        const drawer = new SmilesDrawer.SvgDrawer(sdOptions(w,h));
+        const ok = (tree) => {
+          try { drawer.draw(tree, svgEl, 'light', false); }
+          catch (e) { console.error('SmilesDrawer draw', e); errorEl.textContent = 'SmilesDrawer rendering error'; }
+        };
+        const fail = () => { errorEl.textContent = 'Invalid SMILES for SmilesDrawer'; };
+
+        try{
+          if (SmilesDrawer.parse.length <= 1){
+            SmilesDrawer.parse(smiles).then(ok).catch(fail);
+          } else {
+            SmilesDrawer.parse(smiles, ok, fail);
+          }
+        }catch{ fail(); }
+      }
+
+      // --- RDKit ---
+      function rkOptions(){
+        const opts = {
+          bondLineWidth: Number(document.getElementById('rk-bondLineWidth').value),
+          multipleBondOffset: Number(document.getElementById('rk-multipleBondOffset').value),
+          padding: Number(document.getElementById('rk-padding').value), // fraction of size
+          centreMoleculesBeforeDrawing: boolSelect(document.getElementById('rk-centre').value),
+          addAtomIndices: boolSelect(document.getElementById('rk-addAtomIndices').value),
+          addBondIndices: boolSelect(document.getElementById('rk-addBondIndices').value),
+          explicitMethyl: boolSelect(document.getElementById('rk-explicitMethyl').value),
+          includeRadicals: boolSelect(document.getElementById('rk-includeRadicals').value),
+          legend: String(document.getElementById('rk-legend').value || ''),
+          legendFontSize: Number(document.getElementById('rk-legendFontSize').value),
+          minFontSize: Number(document.getElementById('rk-minFontSize').value),
+          maxFontSize: Number(document.getElementById('rk-maxFontSize').value),
+          fixedBondLength: Number(document.getElementById('rk-fixedBondLength').value), // 0 - auto
+          fixedScale: Number(document.getElementById('rk-fixedScale').value), // 0 - auto
+          backgroundColour: hexToRgb01(document.getElementById('rk-backgroundColour').value),
+          symbolColour: hexToRgb01(document.getElementById('rk-symbolColour').value),
+          scaleBondWidth: boolSelect(document.getElementById('rk-scaleBondWidth').value),
+        };
+        // Note: width/height for SVG are not set via options.
+        // We will forcibly insert them into the SVG attributes after generation.
+        return Object.assign({}, opts, parseJSONSafe(document.getElementById('rk-extra').value));
+      }
+      function renderRDKit(smiles, w, h){
+        if (!RDKitModuleInstance){ errorEl.textContent = 'RDKit.js is not initialized'; return; }
+        let mol = null;
+        try { mol = RDKitModuleInstance.get_mol(smiles); } catch { mol = null; }
+        if (!mol){ errorEl.textContent = 'Invalid SMILES for RDKit.js'; return; }
+
+        // Rules for fitting into the frame:
+        // 1) by default, do not set fixedScale and fixedBondLength - let RDKit choose the scale to fit the frame
+        // 2) enable centering and provide padding of ~0.1
+        const details = JSON.stringify(rkOptions());
+        try{
+          let svg = mol.get_svg_with_highlights(details);
+          // Forcibly set the visible dimensions
+          svg = setSvgSize(svg, w, h);
+          viewer.innerHTML = svg;
+        }catch(e){
+          console.error('RDKit get_svg_with_highlights', e);
+          try{
+            // fallback path - without options
+            let svg = mol.get_svg(w, h);
+            viewer.innerHTML = svg;
+          }catch(e2){
+            console.error('RDKit get_svg fallback', e2);
+            errorEl.textContent = 'Error creating SVG in RDKit';
+          }
+        }finally{
+          mol.delete();
+        }
+      }
+
+      // --- OpenChemLib ---
+      function oclOptions(){
+        const opts = {
+          strokeWidth: Number(document.getElementById('ocl-strokeWidth').value),
+          factorTextSize: Number(document.getElementById('ocl-factorTextSize').value),
+          showAtomNumber: boolSelect(document.getElementById('ocl-showAtomNumber').value),
+          showBondNumber: boolSelect(document.getElementById('ocl-showBondNumber').value),
+          noImplicitHydrogen: boolSelect(document.getElementById('ocl-noImplicitHydrogen').value),
+          drawBondsInGray: boolSelect(document.getElementById('ocl-drawBondsInGray').value),
+          autoCrop: boolSelect(document.getElementById('ocl-autoCrop').value),
+          autoCropMargin: Number(document.getElementById('ocl-autoCropMargin').value),
+          fontWeight: (document.getElementById('ocl-fontWeight').value || undefined),
+        };
+        return Object.assign({}, opts, parseJSONSafe(document.getElementById('ocl-extra').value));
+      }
+      function renderOCL(smiles, w, h){
+        if (typeof OCL === 'undefined'){ errorEl.textContent = 'OpenChemLib is not loaded'; return; }
+        try{
+          const mol = OCL.Molecule.fromSmiles(smiles);
+          const svg = mol.toSVG(w, h, undefined, oclOptions());
+          viewer.innerHTML = svg;
+        }catch(e){
+          console.error('OCL render', e);
+          errorEl.textContent = 'Invalid SMILES for OpenChemLib';
+        }
+      }
+
+      // Saving SVG
+      function saveSVG(){
+        const svg = viewer.querySelector('svg');
+        if (!svg){ errorEl.textContent = 'No SVG to save'; return; }
+        const serializer = new XMLSerializer();
+        let source = serializer.serializeToString(svg);
+        // add xml prolog
+        if (!source.match(/^<\?xml/)) {
+          source = `<?xml version="1.0" encoding="UTF-8"?>\n` + source;
+        }
+        const blob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'molecule.svg';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      // Reset options to default
+      function resetOptions(){
+        presetEl.value = 'clean';
+        applyPreset();
+        // clear the extra JSON fields
+        ['sd-extra','rk-extra','ocl-extra'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        draw();
+      }
+
+      // initial setup
+      applyPreset();
+      draw();
+    })();
+  </script>
+</body>
+</html>
