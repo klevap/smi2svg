@@ -159,6 +159,9 @@
             <div class="field"><label>experimental</label>
               <select id="sd-experimental"><option value="false">false</option><option value="true">true</option></select>
             </div>
+             <div class="field"><label>aromaticCircle</label>
+              <select id="sd-aromaticCircle"><option value="true">true</option><option value="false">false</option></select>
+            </div>
           </div>
           <div class="field">
             <label>Extra JSON options - will be merged into SmilesDrawer settings</label>
@@ -198,6 +201,12 @@
             <div class="field"><label>scaleBondWidth</label>
               <select id="rk-scaleBondWidth"><option value="true">true</option><option value="false">false</option></select>
             </div>
+            <div class="field"><label>addStereoAnnotation</label>
+              <select id="rk-addStereoAnnotation"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>kekulize</label>
+              <select id="rk-kekulize"><option value="true">true</option><option value="false">false</option></select>
+            </div>
           </div>
           <div class="field">
             <label>Extra JSON options - any MolDrawOptions</label>
@@ -227,6 +236,12 @@
             </div>
             <div class="field"><label>autoCropMargin</label><input id="ocl-autoCropMargin" type="number" step="1" value="5" /></div>
             <div class="field"><label>fontWeight</label><input id="ocl-fontWeight" type="text" placeholder="e.g., 700" /></div>
+            <div class="field"><label>suppressChiralText</label>
+              <select id="ocl-suppressChiralText"><option value="false">false</option><option value="true">true</option></select>
+            </div>
+            <div class="field"><label>noTabus</label>
+              <select id="ocl-noTabus"><option value="false">false</option><option value="true">true</option></select>
+            </div>
           </div>
           <div class="field">
             <label>Extra JSON options - passed to Molecule.toSVG</label>
@@ -390,6 +405,7 @@
           terminalCarbons: boolSelect(document.getElementById('sd-terminalCarbons').value),
           explicitHydrogens: boolSelect(document.getElementById('sd-explicitHydrogens').value),
           experimental: boolSelect(document.getElementById('sd-experimental').value),
+          aromaticCircle: boolSelect(document.getElementById('sd-aromaticCircle').value),
         };
         return Object.assign({}, opts, parseJSONSafe(document.getElementById('sd-extra').value));
       }
@@ -439,6 +455,8 @@
           backgroundColour: hexToRgb01(document.getElementById('rk-backgroundColour').value),
           symbolColour: hexToRgb01(document.getElementById('rk-symbolColour').value),
           scaleBondWidth: boolSelect(document.getElementById('rk-scaleBondWidth').value),
+          addStereoAnnotation: boolSelect(document.getElementById('rk-addStereoAnnotation').value),
+          kekulize: boolSelect(document.getElementById('rk-kekulize').value),
         };
         // Note: width/height for SVG are not set via options.
         // We will forcibly insert them into the SVG attributes after generation.
@@ -486,6 +504,8 @@
           autoCrop: boolSelect(document.getElementById('ocl-autoCrop').value),
           autoCropMargin: Number(document.getElementById('ocl-autoCropMargin').value),
           fontWeight: (document.getElementById('ocl-fontWeight').value || undefined),
+          suppressChiralText: boolSelect(document.getElementById('ocl-suppressChiralText').value),
+          noTabus: boolSelect(document.getElementById('ocl-noTabus').value),
         };
         return Object.assign({}, opts, parseJSONSafe(document.getElementById('ocl-extra').value));
       }
